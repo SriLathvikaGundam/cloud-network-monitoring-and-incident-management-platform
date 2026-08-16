@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Incidents{% endblock %}
+
+{% block content %}
+<h1>Incidents</h1>
+
+<table>
+    <tr>
+        <th>ID</th><th>Device</th><th>Severity</th><th>Status</th><th>Description</th><th>Created</th><th>Resolved</th><th>Update</th>
+    </tr>
+    {% for incident in incidents %}
+    <tr>
+        <td>{{ incident.id }}</td>
+        <td>{{ incident.device.name }}</td>
+        <td><span class="badge badge-{{ 'cancelled' if incident.severity in ['high','critical'] else 'pending' }}">{{ incident.severity }}</span></td>
+        <td><span class="badge badge-{{ 'completed' if incident.status == 'resolved' else 'pending' }}">{{ incident.status }}</span></td>
+        <td>{{ incident.description or "-" }}</td>
+        <td>{{ incident.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{{ incident.resolved_at.strftime('%Y-%m-%d %H:%M') if incident.resolved_at else "-" }}</td>
+        <td>
+            <form action="/ui/incidents/{{ incident.id }}/status" method="post" style="display:flex; gap:8px; margin:0;">
+                <select name="status" style="width:auto; margin:0;">
+                    <option value="open" {% if incident.status == "open" %}selected{% endif %}>Open</option>
+                    <option value="investigating" {% if incident.status == "investigating" %}selected{% endif %}>Investigating</option>
+                    <option value="resolved" {% if incident.status == "resolved" %}selected{% endif %}>Resolved</option>
+                </select>
+                <button type="submit" style="padding:6px 12px; font-size:13px;">Update</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

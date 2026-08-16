@@ -4,10 +4,16 @@ from database import Base, engine, SessionLocal
 import models
 import schemas
 import monitoring
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi import Request, Form
+from fastapi.responses import RedirectResponse
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Network Monitoring & Incident Management Platform")
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 def get_db():
@@ -148,3 +154,82 @@ def delete_incident(incident_id: int, db: Session = Depends(get_db)):
     db.delete(incident)
     db.commit()
     return {"message": f"Incident {incident_id} deleted successfully"}
+
+# ---------- UI ROUTES: DASHBOARD ----------
+
+@app.get("/")
+def dashboard(request: Request, db: Session = Depends(get_db)):
+    device_count = db.query(models.Device).count()
+    open_incidents = db.query(models.Incident).filter(models.Incident.status != "resolved").count()
+    resolved_incidents = db.query(models.Incident).filter(models.Incident.status == "resolved").count()
+
+    logs_with_response = db.query(models.MonitoringLog).filter(models.MonitoringLog.response_time_ms.isnot(None)).all()
+    avg_response_time = round(sum(l.response_time_ms for l in logs_with_response) / len(logs_with_response), 1) if logs_with_response else 0
+
+    recent_incidents = db.query(models.Incident).order_by(models.Incident.created_at.desc()).limit(5).all()
+
+    return templates.TemplateResponse(request, "dashboard.html", {
+        "device_count": device_count,
+        "open_incidents": open_incidents,
+        "resolved_incidents": resolved_incidents,
+        "avg_response_time": avg_response_time,
+        "recent_incidents": recent_incidents,
+    })
+
+
+# ---------- UI ROUTES: DEVICES ----------
+
+@app.get("/ui/devices")
+def ui_devices(request: Request, db: Session = Depends(get_db)):
+    devices = db.query(models.Device).all()
+    return templates.TemplateResponse(request, "devices.html", {"devices": devices})
+
+
+@app.post("/ui/devices/create")
+def ui_create_device(
+    name: str = Form(...),
+    hostname: str = Form(...),
+    device_type: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    new_device = models.Device(name=name, hostname=hostname, device_type=device_type or None, is_active=True)
+    db.add(new_device)
+    db.commit()
+    return RedirectResponse(url="/ui/devices", status_code=303)
+
+
+@app.post("/ui/devices/{device_id}/check")
+def ui_check_device(device_id: int, db: Session = Depends(get_db)):
+    device = db.query(models.Device).filter(models.Device.id == device_id).first()
+    if device:
+        monitoring.check_device(db, device)
+    return RedirectResponse(url="/ui/devices", status_code=303)
+
+
+@app.post("/ui/devices/{device_id}/delete")
+def ui_delete_device(device_id: int, db: Session = Depends(get_db)):
+    device = db.query(models.Device).filter(models.Device.id == device_id).first()
+    if device:
+        db.delete(device)
+        db.commit()
+    return RedirectResponse(url="/ui/devices", status_code=303)
+
+
+# ---------- UI ROUTES: INCIDENTS ----------
+
+@app.get("/ui/incidents")
+def ui_incidents(request: Request, db: Session = Depends(get_db)):
+    incidents = db.query(models.Incident).order_by(models.Incident.created_at.desc()).all()
+    return templates.TemplateResponse(request, "incidents.html", {"incidents": incidents})
+
+
+@app.post("/ui/incidents/{incident_id}/status")
+def ui_update_incident_status(incident_id: int, status: str = Form(...), db: Session = Depends(get_db)):
+    incident = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
+    if incident:
+        incident.status = status
+        if status == "resolved":
+            from datetime import datetime
+            incident.resolved_at = datetime.utcnow()
+        db.commit()
+    return RedirectResponse(url="/ui/incidents", status_code=303)

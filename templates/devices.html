@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Devices{% endblock %}
+
+{% block content %}
+<h1>Devices</h1>
+
+<div class="card">
+    <h2>Add New Device</h2>
+    <form action="/ui/devices/create" method="post">
+        <label>Name</label>
+        <input type="text" name="name" required>
+
+        <label>Hostname / IP</label>
+        <input type="text" name="hostname" required>
+
+        <label>Device Type</label>
+        <input type="text" name="device_type" placeholder="server, router, website...">
+
+        <button type="submit">Add Device</button>
+    </form>
+</div>
+
+<table>
+    <tr>
+        <th>ID</th><th>Name</th><th>Hostname</th><th>Type</th><th>Active</th><th>Actions</th>
+    </tr>
+    {% for device in devices %}
+    <tr>
+        <td>{{ device.id }}</td>
+        <td>{{ device.name }}</td>
+        <td>{{ device.hostname }}</td>
+        <td>{{ device.device_type or "-" }}</td>
+        <td>{{ "Yes" if device.is_active else "No" }}</td>
+        <td style="display:flex; gap:8px;">
+            <form action="/ui/devices/{{ device.id }}/check" method="post" style="margin:0;">
+                <button type="submit" style="background:#0891b2;">Check Now</button>
+            </form>
+            <form action="/ui/devices/{{ device.id }}/delete" method="post" style="margin:0;">
+                <button type="submit" class="delete-btn">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
